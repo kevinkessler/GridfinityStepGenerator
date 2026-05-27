@@ -188,14 +188,20 @@ def add_bottom_lip(
             # - Top: wide section (approx 42.4mm per full cell, slightly wider than grid)
             # Built as two stacked sections unioned, with chamfer on bottom
 
-            # Simple pad matching kmeisthax/gridfinity-cadquery reference
+            # Pad with bottom + top chamfer
             pad = (
                 cq.Workplane("XY")
                 .placeSketch(_inset_profile(cw, ch, BLOCK_MATING_INSET))
                 .extrude(BLOCK_MATING_DEPTH * -1)
-                .edges("<Z")
-                .chamfer(BLOCK_MATING_CHAMFER)
             )
+            try:
+                pad = pad.faces("<Z").chamfer(BLOCK_MATING_CHAMFER)
+            except Exception:
+                pass
+            try:
+                pad = pad.faces(">Z").chamfer(0.8)
+            except Exception:
+                pass
 
             pad_grid = pad_grid.union(
                 cq.Workplane("XY").union(pad.val().moved(cq.Location(cq.Vector(px, py, 0))))
