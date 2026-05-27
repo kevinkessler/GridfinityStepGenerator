@@ -188,61 +188,14 @@ def add_bottom_lip(
             # - Top: wide section (approx 42.4mm per full cell, slightly wider than grid)
             # Built as two stacked sections unioned, with chamfer on bottom
 
-            pad_h = BLOCK_MATING_DEPTH
-
-            # Pad dimensions from OpenSCAD pad_oversize hull-of-cylinders:
-            # pad_corner_position = [pitch/2 - corner_radius - clearance/2]
-            #                       = [21 - 3.75 - 0.25] = [17, 17]
-            # hull width = 2*pad_corner + cylinder_diameter
-            #
-            # Bottom (z=0):   cyl d=1.6 → width=34+1.6=35.6, cr=0.8
-            # Bevel1 top:     cyl d=3.2 → width=34+3.2=37.2, cr=1.6 (at z=0.8)
-            # Bevel2 bottom:  cyl d=3.2 → width=34+3.2=37.2, cr=1.6 (at z=2.6)
-            # Top (z=5.0):    cyl d=8.4 → width=34+8.4=42.4, cr=4.2
-            #
-            # Convert to insets from 42mm cell boundary:
-            #   inset = (42 - width) / 2
-            #   bottom_inset = (42-35.6)/2 = 3.2
-            #   mid_inset    = (42-37.2)/2 = 2.4
-            #   top_inset    = (42-42.4)/2 = -0.2
-
-            bottom_inset = 3.2
-            mid_inset = 2.4
-            top_inset = -0.2
-
-            # Lower section (bevel1): z=0 to z=0.8, tapers 35.6→37.2
-            bevel1_h = 0.8
-            lower = (
+            # Simple pad matching kmeisthax/gridfinity-cadquery reference
+            pad = (
                 cq.Workplane("XY")
-                .placeSketch(_inset_profile(cw, ch, bottom_inset))
-                .extrude(bevel1_h * -1)
+                .placeSketch(_inset_profile(cw, ch, BLOCK_MATING_INSET))
+                .extrude(BLOCK_MATING_DEPTH * -1)
+                .edges("<Z")
+                .chamfer(BLOCK_MATING_CHAMFER)
             )
-
-            # Middle section (straight): z=0.8 to z=2.6, constant 37.2
-            mid_h = 1.8
-            middle = (
-                cq.Workplane("XY")
-                .placeSketch(_inset_profile(cw, ch, mid_inset))
-                .extrude(mid_h * -1)
-                .translate((0, 0, -bevel1_h))
-            )
-
-            # Upper section (bevel2 outward flare): z=2.6 to z=4.75, tapers 37.2→42.4
-            upper_h = pad_h - bevel1_h - mid_h
-            upper = (
-                cq.Workplane("XY")
-                .placeSketch(_inset_profile(cw, ch, top_inset))
-                .extrude(upper_h * -1)
-                .translate((0, 0, -bevel1_h - mid_h))
-            )
-
-            pad = lower.union(middle).union(upper)
-
-            # Chamfer very bottom edge
-            try:
-                pad = pad.faces("<Z").chamfer(0.8)
-            except Exception:
-                pass
 
             pad_grid = pad_grid.union(
                 cq.Workplane("XY").union(pad.val().moved(cq.Location(cq.Vector(px, py, 0))))
