@@ -34,6 +34,19 @@ def main(argv: list[str] | None = None) -> None:
                         help="Add tapered corners")
     parser.add_argument("--tapered-radius", type=float, default=10, help="Tapered corner radius (mm)")
 
+    # Dividers
+    parser.add_argument("--vchambers", type=int, default=1,
+                        help="Number of vertical chambers (dividers along X)")
+    parser.add_argument("--hchambers", type=int, default=1,
+                        help="Number of horizontal chambers (dividers along Y)")
+    parser.add_argument("--divider-thickness", type=float, default=1.2,
+                        help="Divider wall thickness (mm)")
+    # Wall cutout
+    parser.add_argument("--cutout", choices=["front", "back", "left", "right"],
+                        help="Add wall cutout on specified wall")
+    parser.add_argument("--cutout-width", type=float, default=20, help="Cutout width (mm)")
+    parser.add_argument("--cutout-height", type=float, default=12, help="Cutout height (mm)")
+
     parser.add_argument("--output", "-o", default="gridfinity_bin.step", help="Output STEP file")
     args = parser.parse_args(argv)
 
@@ -46,6 +59,12 @@ def main(argv: list[str] | None = None) -> None:
         print(f" +finger({args.finger_slide})", end="")
     if args.tapered_corners:
         print(f" +taper({args.tapered_corners})", end="")
+    if args.vchambers > 1:
+        print(f" +vdiv({args.vchambers})", end="")
+    if args.hchambers > 1:
+        print(f" +hdiv({args.hchambers})", end="")
+    if args.cutout:
+        print(f" +cutout({args.cutout})", end="")
     print()
 
     bin_shape = make_bin(
@@ -60,6 +79,12 @@ def main(argv: list[str] | None = None) -> None:
         finger_slide_radius=args.finger_radius,
         tapered_corners=args.tapered_corners or "",
         tapered_radius=args.tapered_radius,
+        vertical_chambers=args.vchambers,
+        horizontal_chambers=args.hchambers,
+        divider_thickness=args.divider_thickness,
+        cutout_wall=args.cutout or "",
+        cutout_width=args.cutout_width,
+        cutout_height=args.cutout_height,
     )
     path = export_step(bin_shape, args.output)
     print(f"STEP exported: {path}")

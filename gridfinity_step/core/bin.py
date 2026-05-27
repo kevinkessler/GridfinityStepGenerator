@@ -151,6 +151,126 @@ def _add_tapered_corner(
     return block
 
 
+# ── Feature: Chamber dividers ──────────────────────────────────────────
+
+def _add_dividers(
+    block: cq.Workplane,
+    width: int,
+    height: int,
+    depth: int,
+    wall_thickness: float,
+    floor_thickness: float,
+    vertical: int = 1,
+    horizontal: int = 1,
+    divider_thickness: float = 1.2,
+) -> cq.Workplane:
+    """Add internal divider walls to split the bin into chambers.
+
+    Args:
+        vertical: Number of vertical chambers (dividers along X, spanning Y)
+        horizontal: Number of horizontal chambers (dividers along Y, spanning X)
+    """
+    if vertical < 2 and horizontal < 2:
+        return block
+
+    body_h = _block_height(depth)
+    lip_inner_w = width * GRID_UNIT - 2 * BLOCK_MATING_INSET
+    lip_inner_h = height * GRID_UNIT - 2 * BLOCK_MATING_INSET
+    cavity_w = lip_inner_w - 2 * wall_thickness
+    cavity_h_dim = lip_inner_h - 2 * wall_thickness
+
+    floor_z = BLOCK_MATING_DEPTH + floor_thickness
+    divider_h = body_h - floor_z - 2  # leave small gap at top
+
+    half_cw = cavity_w / 2
+    half_ch = cavity_h_dim / 2
+
+    # Vertical dividers (walls running in Y direction, at X intervals)
+    for i in range(1, vertical):
+        x_pos = -half_cw + i * (cavity_w / vertical)
+        div = (
+            cq.Workplane("XY")
+            .box(divider_thickness, cavity_h_dim, divider_h)
+            .translate((x_pos, 0, floor_z + divider_h / 2))
+        )
+        block = block.union(div)
+
+    # Horizontal dividers (walls running in X direction, at Y intervals)
+    for i in range(1, horizontal):
+        y_pos = -half_ch + i * (cavity_h_dim / horizontal)
+        div = (
+            cq.Workplane("XY")
+            .box(cavity_w, divider_thickness, divider_h)
+            .translate((0, y_pos, floor_z + divider_h / 2))
+        )
+        block = block.union(div)
+
+    return block
+
+
+# ── Feature: Wall cutouts ──────────────────────────────────────────────
+
+def _add_wall_cutout(
+    block: cq.Workplane,
+    width: int,
+    height: int,
+    depth: int,
+    wall: str = "front",
+    position: float = 0.5,     # 0-1 ratio along wall
+    cutout_width: float = 20,  # mm
+    cutout_height: float = 12, # mm
+    corner_radius: float = 3,
+) -> cq.Workplane:
+    """Cut a rounded-rectangle opening in one wall for easy access."""
+    outer_w = width * GRID_UNIT - BLOCK_SPACING
+    outer_h = height * GRID_UNIT - BLOCK_SPACING
+    body_h = _block_height(depth)
+
+    half_w = outer_w / 2
+    half_h = outer_h / 2
+
+    # Cutout shape — a thin box that will cut through the wall
+    cutout = (
+        cq.Workplane("XY")
+        .placeSketch(
+            cq.Sketch()
+            .rect(cutout_width, cutout_height)
+            .vertices()
+            .fillet(corner_radius)
+        )
+        .extrude(20)  # thick enough to cut through wall
+    )
+
+    # Position based on wall side and position ratio
+    mid_z = body_h * 0.45  # roughly centered vertically
+
+    wall_dirs = {
+        "front": (0, -1, 0),  # face normal is -Y
+        "back":  (0,  1, 0),  # face normal is +Y
+        "left":  (-1, 0, 0),  # face normal is -X
+        "right": (1,  0, 0),  # face normal is +X
+    }
+
+    if wall not in wall_dirs:
+        return block
+
+    nx, ny, _ = wall_dirs[wall]
+
+    if nx != 0:  # left/right wall — cutout spans Y
+        span = outer_h
+        cutout_x = nx * (half_w - 5)  # 5mm outside the wall
+        cutout_y = (position - 0.5) * span  # position along Y
+    else:  # front/back wall — cutout spans X
+        span = outer_w
+        cutout_x = (position - 0.5) * span
+        cutout_y = ny * (half_h - 5)
+
+    cutout = cutout.translate((cutout_x, cutout_y, mid_z))
+    block = block.cut(cutout)
+
+    return block
+
+
 # ── Main assembly ──────────────────────────────────────────────────────
 
 def make_bin(
@@ -170,6 +290,14 @@ def make_bin(
     # Tapered corner
     tapered_corners: str = "",
     tapered_radius: float = 10,
+    # Dividers
+    vertical_chambers: int = 1,
+    horizontal_chambers: int = 1,
+    divider_thickness: float = 1.2,
+    # Wall cutouts
+    cutout_wall: str = "",
+    cutout_width: float = 20,
+    cutout_height: float = 12,
 ) -> cq.Workplane:
     """Create a hollow Gridfinity storage bin."""
     body_h = _block_height(depth)
@@ -206,7 +334,26 @@ def make_bin(
     # 4. Add bottom mating lip
     block = add_bottom_lip(block, width, height, magnets=magnets)
 
-    # 5. Optional features
+    # 5. Dividers (inside cavity)
+    if vertical_chambers > 1 or horizontal_chambers > 1:
+        block = _add_dividers(
+            block, width, height, depth,
+            wall_thickness, floor_thickness,
+            vertical=vertical_chambers,
+            horizontal=horizontal_chambers,
+            divider_thickness=divider_thickness,
+        )
+
+    # 6. Wall cutout
+    if cutout_wall:
+        block = _add_wall_cutout(
+            block, width, height, depth,
+            wall=cutout_wall,
+            cutout_width=cutout_width,
+            cutout_height=cutout_height,
+        )
+
+    # 7. Optional features
     if label_wall:
         block = _add_label_tab(
             block, width, height, depth,
