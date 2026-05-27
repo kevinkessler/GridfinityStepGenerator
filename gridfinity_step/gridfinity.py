@@ -183,15 +183,47 @@ def add_bottom_lip(
                 accum_y += ch
                 continue
 
-            # Create pad sized proportionally to cell
-            pad_profile = _inset_profile(cw, ch, BLOCK_MATING_INSET)
-            pad = (
+            # Create dual-taper pad matching OpenSCAD pad_oversize profile:
+            # - Bottom: narrow section (approx 35.6mm per full cell)
+            # - Top: wide section (approx 42.4mm per full cell, slightly wider than grid)
+            # Built as two stacked sections unioned, with chamfer on bottom
+
+            pad_h = BLOCK_MATING_DEPTH
+            bevel_h = 0.8
+            top_h = pad_h - bevel_h
+
+            # Top section: wide — uses block mating inset directly
+            top_pad = (
                 cq.Workplane("XY")
-                .placeSketch(pad_profile)
-                .extrude(BLOCK_MATING_DEPTH * -1)
-                .edges("<Z")
-                .chamfer(BLOCK_MATING_CHAMFER)
+                .placeSketch(_inset_profile(cw, ch, BLOCK_MATING_INSET))
+                .extrude(top_h * -1)
+                .translate((0, 0, bevel_h))
             )
+
+            # Bottom section: narrow — about 2/3 the width
+            narrow_inset = BLOCK_MATING_INSET + 3.5
+            w = max(1, cw * GRID_UNIT - narrow_inset * 2)
+            h = max(1, ch * GRID_UNIT - narrow_inset * 2)
+            cr = max(0.5, FILLET_RADIUS - narrow_inset)
+            bottom_pad = (
+                cq.Workplane("XY")
+                .placeSketch(
+                    cq.Sketch().rect(w, h).vertices().fillet(cr)
+                )
+                .extrude(bevel_h * -1)
+            )
+
+            pad = top_pad.union(bottom_pad)
+            # Two chamfers: bottom edge + top edge (where pad meets block body)
+            try:
+                pad = pad.faces("<Z").chamfer(0.8)  # bottom bevel
+            except Exception:
+                pass
+            try:
+                pad = pad.faces(">Z").chamfer(0.5)  # top bevel at body junction
+            except Exception:
+                pass
+
             pad_grid = pad_grid.union(
                 cq.Workplane("XY").union(pad.val().moved(cq.Location(cq.Vector(px, py, 0))))
             )
