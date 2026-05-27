@@ -1,21 +1,26 @@
-"""Gridfinity stacking lip — the top rim that allows bins to stack.
+"""Gridfinity stacking lip — per the official spec.
 
-Returns a shape with bottom face at z=0, top at z=GF_LIP_TOTAL.
-Caller translates to position the lip bottom at the top of the bin body.
+The lip is flush with the bin body externally (same 41.5mm per unit width).
+Internally, a tapered profile creates the shelf for stacking.
+
+Profile (top to bottom):
+  0.25mm flat
+  1.9mm at 45° inward
+  1.8mm vertical
+  0.7mm at 45° outward (back to wall)
+  Total: ~4.4mm
+
+In CADQuery, this is created by subtracting a tapered cavity from the outer lip block.
 """
 
 import cadquery as cq
 
 from gridfinity_step.constants import (
-    GF_PITCH,
-    GF_CLEARANCE,
     GF_CORNER_RADIUS,
-    GF_LIP_LOWER_TAPER_HEIGHT,
-    GF_LIP_RISER_HEIGHT,
-    GF_LIP_UPPER_TAPER_HEIGHT,
-    GF_LIP_TOTAL,
 )
 from gridfinity_step.geometry import rounded_box, bin_outer_dimensions
+
+LIP_HEIGHT = 4.4
 
 
 def make_lip(
@@ -26,59 +31,70 @@ def make_lip(
     headroom: float = 0.8,
     notches: bool = True,
 ) -> cq.Workplane:
-    """Create the stacking lip with bottom at z=0.
-
-    For "normal" lip: three stacked sections that approximate the taper profile.
-    """
+    """Create the stacking lip, bottom at z=0, top at z=LIP_HEIGHT."""
     outer_w, outer_d = bin_outer_dimensions(num_x, num_y)
-    outer_w -= headroom
-    outer_d -= headroom
     cr = GF_CORNER_RADIUS
 
     if lip_style == "none":
         return cq.Workplane("XY")
 
+    # 1. Outer lip block — flush with bin body
+    outer_lip = rounded_box(outer_w, outer_d, LIP_HEIGHT, cr)
+    outer_lip = outer_lip.translate((0, 0, LIP_HEIGHT / 2))
+
     if lip_style == "normal":
-        h1 = GF_LIP_LOWER_TAPER_HEIGHT
-        h2 = GF_LIP_RISER_HEIGHT
-        h3 = GF_LIP_UPPER_TAPER_HEIGHT
+        # 2. Create the tapered internal cavity
+        # The shelf protrudes inward by approximately 1.65mm from the wall
+        # (this is the 'q' value from OpenSCAD: 1.65 - wall_thickness + 0.95)
 
-        # At widest point, lip extends ~2.5mm beyond bin on each side
-        taper_out = 2.5
-        w_wide = outer_w + 2 * taper_out
-        d_wide = outer_d + 2 * taper_out
-        w_top = outer_w + 2 * 0.3
-        d_top = outer_d + 2 * 0.3
+        inner_cr = max(0.1, cr - wall_thickness)
 
-        # Build bottom-up: each section sits on top of the previous
-        sections = []
+        # Width at wall inner boundary
+        inner_w = outer_w - 2 * wall_thickness
+        inner_d = outer_d - 2 * wall_thickness
 
-        # Lower taper: widest width, height h1
-        s = rounded_box(w_wide, d_wide, h1, cr)
-        s = s.translate((0, 0, h1 / 2))
-        sections.append(s)
+        # The lip overhangs inward: the top opening is narrower
+        # Overhang amount (q in OpenSCAD) = 1.65 - wall_thickness + 0.95
+        q = 1.65 - wall_thickness + 0.95
+        overhang = (2.3 + 2 * q) / 2  # effective inward protrusion
 
-        # Riser: same width, height h2
-        s = rounded_box(w_wide, d_wide, h2, cr)
-        s = s.translate((0, 0, h1 + h2 / 2))
-        sections.append(s)
+        # Top opening dimensions (narrower due to overhang)
+        top_inner_w = inner_w - 2 * overhang
+        top_inner_d = inner_d - 2 * overhang
+        top_inner_cr = max(0.1, inner_cr - overhang)
 
-        # Upper taper: narrower, height h3
-        s = rounded_box(w_top, d_top, h3, cr)
-        s = s.translate((0, 0, h1 + h2 + h3 / 2))
-        sections.append(s)
+        # Build cavity as two stacked sections that approximate the taper
+        # Lower section: wall inner dimensions (most of the height)
+        lower_h = LIP_HEIGHT * 0.55  # ~2.4mm
+        lower = rounded_box(inner_w, inner_d, lower_h, inner_cr)
+        lower = lower.translate((0, 0, lower_h / 2))
 
-        result = sections[0]
-        for s in sections[1:]:
-            result = result.union(s)
+        # Upper section: narrower (the shelf), taller at top
+        upper_h = LIP_HEIGHT - lower_h  # ~2.0mm
+        upper = rounded_box(top_inner_w, top_inner_d, upper_h + 0.5, top_inner_cr)
+        upper = upper.translate((0, 0, lower_h + upper_h / 2))
 
+        cavity = lower.union(upper)
+        result = outer_lip.cut(cavity)
+
+    elif lip_style in ("reduced", "reduced_double"):
+        # Reduced lip: less overhang
+        inner_cr = max(0.1, cr - wall_thickness)
+        inner_w = outer_w - 2 * wall_thickness
+        inner_d = outer_d - 2 * wall_thickness
+        cavity = rounded_box(inner_w, inner_d, LIP_HEIGHT + 0.1, inner_cr)
+        cavity = cavity.translate((0, 0, LIP_HEIGHT / 2))
+        result = outer_lip.cut(cavity)
+
+    elif lip_style == "minimum":
+        # Minimum lip: nearly no overhang
+        inner_cr = max(0.1, cr - wall_thickness - 1.0)
+        inner_w = outer_w - 2 * (wall_thickness + 1.0)
+        inner_d = outer_d - 2 * (wall_thickness + 1.0)
+        cavity = rounded_box(inner_w, inner_d, LIP_HEIGHT + 0.1, inner_cr)
+        cavity = cavity.translate((0, 0, LIP_HEIGHT / 2))
+        result = outer_lip.cut(cavity)
     else:
-        # Reduced/minimum lip: simpler, single block
-        w = outer_w + 2 * 1.0
-        d = outer_d + 2 * 1.0
-        result = rounded_box(w, d, GF_LIP_TOTAL, cr)
-        result = result.translate((0, 0, GF_LIP_TOTAL / 2))
+        result = outer_lip
 
-    # Ensure bottom is exactly at z=0 (shift if needed)
-    # The sections are built with bottom at 0, so no shift needed
     return result
