@@ -188,20 +188,27 @@ def add_bottom_lip(
             # - Top: wide section (approx 42.4mm per full cell, slightly wider than grid)
             # Built as two stacked sections unioned, with chamfer on bottom
 
-            # Pad with bottom + top chamfer
-            pad = (
+            # Pad: narrow bottom + wider top section for outward flare
+            base = (
                 cq.Workplane("XY")
                 .placeSketch(_inset_profile(cw, ch, BLOCK_MATING_INSET))
                 .extrude(BLOCK_MATING_DEPTH * -1)
             )
+            # Bottom chamfer
             try:
-                pad = pad.faces("<Z").chamfer(BLOCK_MATING_CHAMFER)
+                base = base.faces("<Z").chamfer(BLOCK_MATING_CHAMFER)
             except Exception:
                 pass
-            try:
-                pad = pad.faces(">Z").chamfer(0.8)
-            except Exception:
-                pass
+
+            # Wide top section (flares outward)
+            flare_h = 1.0
+            flare_inset = BLOCK_MATING_INSET - 1.5
+            flare = (
+                cq.Workplane("XY")
+                .placeSketch(_inset_profile(cw, ch, flare_inset))
+                .extrude(flare_h * -1)
+            )
+            pad = base.union(flare)
 
             pad_grid = pad_grid.union(
                 cq.Workplane("XY").union(pad.val().moved(cq.Location(cq.Vector(px, py, 0))))
