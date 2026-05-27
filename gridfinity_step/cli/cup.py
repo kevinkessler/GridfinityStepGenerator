@@ -11,8 +11,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Generate Gridfinity bin STEP files",
     )
-    parser.add_argument("width", type=int, help="Width in grid units")
-    parser.add_argument("height", type=int, help="Height (depth) in grid units")
+    parser.add_argument("width", type=float, help="Width in grid units")
+    parser.add_argument("height", type=float, help="Height (depth) in grid units")
     parser.add_argument("depth", type=int, help="Bin depth (2 or 3 recommended)")
     parser.add_argument("--wall", "-w", type=float, default=1.2, help="Wall thickness (mm)")
     parser.add_argument("--floor", "-f", type=float, default=1.2, help="Floor thickness (mm)")
@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--output", "-o", default="gridfinity_bin.step", help="Output STEP file")
     args = parser.parse_args(argv)
 
-    print(f"Generating {args.width}\u00d7{args.height}\u00d7{args.depth} bin", end="")
+    print(f"Generating {args.width:.3g}\u00d7{args.height:.3g}\u00d7{args.depth} bin", end="")
     if args.magnets:
         print(" +magnets", end="")
     if args.label:

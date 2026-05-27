@@ -4,6 +4,7 @@ Based on the reference implementation by kmeisthax/gridfinity-cadquery.
 Uses Sketch API for clean rounded-rectangle profiles.
 """
 
+import math
 import cadquery as cq
 
 # ── Gridfinity spec constants ──────────────────────────────────────────
@@ -38,7 +39,7 @@ SCREW_DEPTH = 6.0
 
 # ── Profile helpers ────────────────────────────────────────────────────
 
-def _inset_profile(gw: int, gh: int, inset: float) -> cq.Sketch:
+def _inset_profile(gw: float, gh: float, inset: float) -> cq.Sketch:
     """Rounded rectangle sketch for a gw×gh grid-unit block, inset by `inset` mm."""
     w = gw * GRID_UNIT - inset * 2
     h = gh * GRID_UNIT - inset * 2
@@ -57,7 +58,7 @@ def _block_height(depth: int) -> float:
 
 # ── Public API ─────────────────────────────────────────────────────────
 
-def make_block(width: int, height: int, depth: int) -> cq.Workplane:
+def make_block(width: float, height: float, depth: int) -> cq.Workplane:
     """Create a solid Gridfinity block body (no lip, no cutouts)."""
     return (
         cq.Workplane("XY")
@@ -66,11 +67,8 @@ def make_block(width: int, height: int, depth: int) -> cq.Workplane:
     )
 
 
-def cut_stacking_lip(block: cq.Workplane, width: int, height: int) -> cq.Workplane:
-    """Cut the stacking lip into the top (>Z) face of a block.
-
-    This creates the recessed rim that allows another block to stack on top.
-    """
+def cut_stacking_lip(block: cq.Workplane, width: float, height: float) -> cq.Workplane:
+    """Cut the stacking lip into the top (>Z) face of a block."""
     top_z = block.faces(">Z").val().Center().z
 
     inset = (
@@ -82,7 +80,6 @@ def cut_stacking_lip(block: cq.Workplane, width: int, height: int) -> cq.Workpla
 
     result = block.faces(">Z").cut(inset)
 
-    # Chamfer and fillet the lip edges for smooth stacking
     try:
         result = (
             result
@@ -104,22 +101,22 @@ def cut_stacking_lip(block: cq.Workplane, width: int, height: int) -> cq.Workpla
             .fillet(BLOCK_STACKING_LIP)
         )
     except Exception:
-        pass  # fillets may fail on small geometry
+        pass
 
     return result
 
 
 def add_bottom_lip(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     magnets: bool = False,
 ) -> cq.Workplane:
     """Add the Gridfinity mating lip to the bottom (<Z) face.
 
-    The lip has a grid of tapered feet that fit into a baseplate.
+    Supports fractional grid dimensions by placing pads at integer grid
+    positions plus fractional edge pads where needed.
     """
-    # Single 1×1 lip profile
     mating_sketch = _inset_profile(1, 1, BLOCK_MATING_INSET)
     lip_solid = (
         cq.Workplane("XY")
@@ -129,20 +126,23 @@ def add_bottom_lip(
         .chamfer(BLOCK_MATING_CHAMFER)
     )
 
-    # Place one lip per grid cell on the bottom face
-    result = (
-        block.faces("<Z")
-        .rarray(GRID_UNIT, GRID_UNIT, width, height)
-        .eachpoint(
-            lambda loc: lip_solid.val().moved(loc),
-            combine="a",
-            clean=True,
-        )
-    )
+    # Integer pad counts for full grid positions + fractional ends
+    pads_x = math.ceil(width) + 1
+    pads_y = math.ceil(height) + 1
 
-    # Chamfer the inter-pad fillets
-    for i in range(width):
-        for j in range(height):
+    result = block
+    for ix in range(pads_x):
+        for iy in range(pads_y):
+            px = ix * GRID_UNIT - (width * GRID_UNIT / 2)
+            py = iy * GRID_UNIT - (height * GRID_UNIT / 2)
+            result = result.union(
+                cq.Workplane("XY")
+                .union(lip_solid.val().moved(cq.Location(cq.Vector(px, py, 0))))
+            )
+
+    # Chamfer inter-pad fillets
+    for i in range(pads_x):
+        for j in range(pads_y):
             x = (i * GRID_UNIT) - (width * GRID_UNIT / 2) + BLOCK_MATING_INSET
             y = (j * GRID_UNIT) - (height * GRID_UNIT / 2) + BLOCK_MATING_INSET
             try:
@@ -159,7 +159,7 @@ def add_bottom_lip(
         result = (
             result.faces("<Z")
             .workplane()
-            .rarray(GRID_UNIT, GRID_UNIT, width, height)
+            .rarray(GRID_UNIT, GRID_UNIT, pads_x - 1, pads_y - 1)
             .rect(GRID_UNIT - MAGNET_INSET * 2, GRID_UNIT - MAGNET_INSET * 2)
             .vertices()
             .cboreHole(SCREW_DIAMETER, MAGNET_DIAMETER, MAGNET_DEPTH, SCREW_DEPTH)
@@ -169,8 +169,8 @@ def add_bottom_lip(
 
 
 def make_bin(
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     magnets: bool = False,
 ) -> cq.Workplane:

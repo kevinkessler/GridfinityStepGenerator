@@ -1,3 +1,4 @@
+import math
 """Assemble a complete hollow Gridfinity bin with optional features."""
 
 import cadquery as cq
@@ -20,8 +21,8 @@ from gridfinity_step.gridfinity import (
 
 def _add_label_tab(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall_thickness: float,
     wall: str = "back",
@@ -91,8 +92,8 @@ def _add_label_tab(
 
 def _add_finger_slide(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     wall: str = "front",
     radius: float = 8,
 ) -> cq.Workplane:
@@ -126,8 +127,8 @@ def _add_finger_slide(
 
 def _add_tapered_corner(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     corners: str = "all",  # all, front_left, front_right, back_left, back_right
     radius: float = 10,
     setback: float = -1,  # -1 = auto
@@ -171,8 +172,8 @@ def _add_tapered_corner(
 
 def _add_dividers(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall_thickness: float,
     floor_thickness: float,
@@ -228,8 +229,8 @@ def _add_dividers(
 
 def _add_wall_cutout(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall: str = "front",
     position: float = 0.5,     # 0-1 ratio along wall
@@ -291,8 +292,8 @@ def _add_wall_cutout(
 
 def _add_sliding_lid_groove(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall_thickness: float,
     lid_thickness: float = 0,
@@ -341,8 +342,8 @@ def _add_sliding_lid_groove(
 
 
 def make_lid(
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall_thickness: float = 1.2,
     lid_thickness: float = 0,
@@ -387,8 +388,8 @@ def make_lid(
 
 def _add_extension_tabs(
     block: cq.Workplane,
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall_thickness: float,
     side: str = "x",  # "x", "y", or "both"
@@ -431,8 +432,8 @@ def _add_extension_tabs(
 # ── Main assembly ──────────────────────────────────────────────────────
 
 def make_bin(
-    width: int,
-    height: int,
+    width: float,
+    height: float,
     depth: int,
     wall_thickness: float = 1.2,
     floor_thickness: float = 1.2,
