@@ -126,9 +126,9 @@ def add_bottom_lip(
         .chamfer(BLOCK_MATING_CHAMFER)
     )
 
-    # Integer pad counts for full grid positions + fractional ends
-    pads_x = math.ceil(width) + 1
-    pads_y = math.ceil(height) + 1
+    # Pad positions: only at integer grid positions (not fractional ends)
+    pads_x = int(width) + 1
+    pads_y = int(height) + 1
 
     result = block
     for ix in range(pads_x):
