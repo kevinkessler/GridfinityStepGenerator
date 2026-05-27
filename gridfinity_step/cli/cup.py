@@ -46,6 +46,17 @@ def main(argv: list[str] | None = None) -> None:
                         help="Add wall cutout on specified wall")
     parser.add_argument("--cutout-width", type=float, default=20, help="Cutout width (mm)")
     parser.add_argument("--cutout-height", type=float, default=12, help="Cutout height (mm)")
+    # Sliding lid
+    parser.add_argument("--sliding-lid", action="store_true", help="Add groove for sliding lid")
+    parser.add_argument("--lid-thickness", type=float, default=0,
+                        help="Lid thickness (0=auto, 2x wall)")
+    parser.add_argument("--lid-clearance", type=float, default=0.1, help="Lid clearance (mm)")
+    # Efficient floor
+    parser.add_argument("--efficient-floor", action="store_true",
+                        help="Fillet bottom edges to save material")
+    # Extension tabs
+    parser.add_argument("--extend", choices=["x", "y", "both"],
+                        help="Add connector tabs on sides for joining bins")
 
     parser.add_argument("--output", "-o", default="gridfinity_bin.step", help="Output STEP file")
     args = parser.parse_args(argv)
@@ -65,6 +76,12 @@ def main(argv: list[str] | None = None) -> None:
         print(f" +hdiv({args.hchambers})", end="")
     if args.cutout:
         print(f" +cutout({args.cutout})", end="")
+    if args.sliding_lid:
+        print(" +sliding-lid", end="")
+    if args.efficient_floor:
+        print(" +eff-floor", end="")
+    if args.extend:
+        print(f" +extend({args.extend})", end="")
     print()
 
     bin_shape = make_bin(
@@ -85,6 +102,11 @@ def main(argv: list[str] | None = None) -> None:
         cutout_wall=args.cutout or "",
         cutout_width=args.cutout_width,
         cutout_height=args.cutout_height,
+        sliding_lid=args.sliding_lid,
+        lid_thickness=args.lid_thickness,
+        lid_clearance=args.lid_clearance,
+        efficient_floor=args.efficient_floor,
+        extension_side=args.extend or "",
     )
     path = export_step(bin_shape, args.output)
     print(f"STEP exported: {path}")

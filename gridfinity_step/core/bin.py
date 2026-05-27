@@ -287,6 +287,147 @@ def _add_wall_cutout(
     return block
 
 
+# ── Feature: Sliding lid ───────────────────────────────────────────────
+
+def _add_sliding_lid_groove(
+    block: cq.Workplane,
+    width: int,
+    height: int,
+    depth: int,
+    wall_thickness: float,
+    lid_thickness: float = 0,
+    clearance: float = 0.1,
+    min_support: float = 0,
+    min_wall: float = 0,
+) -> cq.Workplane:
+    """Cut a ledge around the inner perimeter for a sliding lid to rest on.
+
+    The groove is cut just below the stacking lip, creating a wider opening
+    at the top of the cavity where the lid slides in.
+    """
+    body_h = _block_height(depth)
+
+    # Defaults based on wall_thickness (matching OpenSCAD defaults)
+    if lid_thickness <= 0:
+        lid_thickness = wall_thickness * 2
+    if min_wall <= 0:
+        min_wall = wall_thickness / 2
+    if min_support <= 0:
+        min_support = lid_thickness / 2
+
+    outer_w = width * GRID_UNIT - BLOCK_SPACING
+    outer_h = height * GRID_UNIT - BLOCK_SPACING
+
+    # The groove is a wider cavity section at the top
+    # It extends from below the lip down by lid_thickness + min_support
+    groove_w = outer_w - clearance * 2 - min_wall * 2
+    groove_h = outer_h - clearance * 2 - min_wall * 2
+    groove_depth = lid_thickness + min_support + 0.5
+    groove_z = body_h - groove_depth  # starts below the lip
+
+    groove = (
+        cq.Workplane("XY")
+        .placeSketch(
+            cq.Sketch()
+            .rect(groove_w, groove_h)
+            .vertices()
+            .fillet(max(0.5, FILLET_RADIUS - min_wall))
+        )
+        .extrude(groove_depth)
+        .translate((0, 0, groove_z + groove_depth / 2))
+    )
+
+    return block.cut(groove)
+
+
+def make_lid(
+    width: int,
+    height: int,
+    depth: int,
+    wall_thickness: float = 1.2,
+    lid_thickness: float = 0,
+    clearance: float = 0.1,
+    min_wall: float = 0,
+) -> cq.Workplane:
+    """Generate a separate sliding lid that fits the bin's groove.
+
+    The lid is a flat rounded rectangle sized to fit into the groove
+    with the specified clearance.
+    """
+    body_h = _block_height(depth)
+
+    if lid_thickness <= 0:
+        lid_thickness = wall_thickness * 2
+    if min_wall <= 0:
+        min_wall = wall_thickness / 2
+
+    outer_w = width * GRID_UNIT - BLOCK_SPACING
+    outer_h = height * GRID_UNIT - BLOCK_SPACING
+
+    # Lid is slightly smaller than the groove for fit
+    lid_w = outer_w - clearance * 2 - min_wall * 2 - 0.2
+    lid_h = outer_h - clearance * 2 - min_wall * 2 - 0.2
+
+    lid = (
+        cq.Workplane("XY")
+        .placeSketch(
+            cq.Sketch()
+            .rect(lid_w, lid_h)
+            .vertices()
+            .fillet(max(0.5, FILLET_RADIUS - min_wall - 0.2))
+        )
+        .extrude(lid_thickness)
+        .translate((0, 0, lid_thickness / 2))
+    )
+
+    return lid
+
+
+# ── Feature: Extendable sections ──────────────────────────────────────
+
+def _add_extension_tabs(
+    block: cq.Workplane,
+    width: int,
+    height: int,
+    depth: int,
+    wall_thickness: float,
+    side: str = "x",  # "x", "y", or "both"
+) -> cq.Workplane:
+    """Add connector tabs on the sides for joining bins together."""
+    outer_w = width * GRID_UNIT - BLOCK_SPACING
+    outer_h = height * GRID_UNIT - BLOCK_SPACING
+    body_h = _block_height(depth)
+
+    tab_w = 10
+    tab_d = 3
+    tab_h = 4
+    z_mid = body_h * 0.5
+
+    if side in ("x", "both"):
+        # Tabs on left and right edges
+        for x_sign in [-1, 1]:
+            x_center = x_sign * (outer_w / 2 + tab_d / 2)
+            tab = (
+                cq.Workplane("XY")
+                .box(tab_d, tab_w, tab_h)
+                .translate((x_center, 0, z_mid))
+            )
+            block = block.union(tab)
+
+    if side in ("y", "both"):
+        # Tabs on front and back edges
+        for y_sign in [-1, 1]:
+            y_center = y_sign * (outer_h / 2 + tab_d / 2)
+            tab = (
+                cq.Workplane("XY")
+                .box(tab_w, tab_d, tab_h)
+                .translate((0, y_center, z_mid))
+            )
+            block = block.union(tab)
+
+    return block
+
+
 # ── Main assembly ──────────────────────────────────────────────────────
 
 def make_bin(
@@ -314,6 +455,14 @@ def make_bin(
     cutout_wall: str = "",
     cutout_width: float = 20,
     cutout_height: float = 12,
+    # Sliding lid
+    sliding_lid: bool = False,
+    lid_thickness: float = 0,
+    lid_clearance: float = 0.1,
+    # Efficient floor
+    efficient_floor: bool = False,
+    # Extension tabs
+    extension_side: str = "",
 ) -> cq.Workplane:
     """Create a hollow Gridfinity storage bin."""
     body_h = _block_height(depth)
@@ -347,8 +496,24 @@ def make_bin(
     )
     block = block.cut(cavity)
 
+    # 3b. Efficient floor — fillet the bottom interior edges
+    if efficient_floor:
+        try:
+            block = block.faces(">Z").edges(cq.NearestToPointSelector((0, 0, floor_z + 2))).fillet(2)
+        except Exception:
+            pass
+
     # 4. Add bottom mating lip
     block = add_bottom_lip(block, width, height, magnets=magnets)
+
+    # 5. Sliding lid groove (before dividers so they don't block it)
+    if sliding_lid:
+        block = _add_sliding_lid_groove(
+            block, width, height, depth,
+            wall_thickness,
+            lid_thickness=lid_thickness,
+            clearance=lid_clearance,
+        )
 
     # 5. Dividers (inside cavity)
     if vertical_chambers > 1 or horizontal_chambers > 1:
@@ -386,6 +551,12 @@ def make_bin(
         block = _add_tapered_corner(
             block, width, height,
             corners=tapered_corners, radius=tapered_radius,
+        )
+
+    if extension_side:
+        block = _add_extension_tabs(
+            block, width, height, depth, wall_thickness,
+            side=extension_side,
         )
 
     return block
