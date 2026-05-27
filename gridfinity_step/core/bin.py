@@ -45,7 +45,8 @@ def _add_label_tab(
     cavity_h_dim = lip_inner_h - 2 * wall_thickness
 
     if label_width <= 0:
-        label_width = cavity_w - 2 if wall in ("front", "back") else cavity_h_dim - 2
+        # Span full cavity + extend slightly into side walls for connection
+        label_width = (cavity_w + wall_thickness * 2) if wall in ("front", "back") else (cavity_h_dim + wall_thickness * 2)
     if label_height <= 0:
         label_height = label_depth * 0.75
 
@@ -69,18 +70,17 @@ def _add_label_tab(
 
     axis, wall_face = wall_dirs[wall]
 
-    # Wedge extends from wall inner face toward center by label_depth
+    # Wedge extends from wall inner face toward center by label_depth,
+    # but also extends wall_thickness INTO the wall for a solid connection
     if axis == "Y":
-        wedge = cq.Workplane("XY").box(label_width, label_depth, label_height)
-        # Back wall: extend toward -Y (center). Front wall: extend toward +Y (center)
+        wedge = cq.Workplane("XY").box(label_width, label_depth + wall_thickness, label_height)
         direction = -1 if wall == "back" else 1
-        y_center = wall_face + direction * label_depth / 2
+        y_center = wall_face + direction * (label_depth - wall_thickness) / 2
         wedge = wedge.translate((0, y_center, z_top - label_height / 2))
     else:
-        wedge = cq.Workplane("XY").box(label_depth, label_width, label_height)
-        # Right wall: extend toward -X (center). Left wall: extend toward +X (center)
+        wedge = cq.Workplane("XY").box(label_depth + wall_thickness, label_width, label_height)
         direction = -1 if wall == "right" else 1
-        x_center = wall_face + direction * label_depth / 2
+        x_center = wall_face + direction * (label_depth - wall_thickness) / 2
         wedge = wedge.translate((x_center, 0, z_top - label_height / 2))
 
     block = block.union(wedge)
