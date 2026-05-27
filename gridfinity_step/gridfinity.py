@@ -106,26 +106,45 @@ def cut_stacking_lip(block: cq.Workplane, width: float, height: float) -> cq.Wor
     return result
 
 
-def _cell_sizes(dim: float) -> list[tuple[float, bool]]:
+def _cell_sizes(dim: float, position: str = "near") -> list[tuple[float, bool]]:
     """Convert a fractional grid dimension into cell sizes, matching OpenSCAD's num_to_list.
 
-    Returns list of [cell_size_in_grid_units, is_outer_edge].
-    e.g. 1.2143 → [[1.0, True], [0.2143, False]]
-         2.0    → [[1.0, True], [1.0, True]]
+    position: "near" (fraction at end), "far" (fraction at start), "center" (split both ends)
     """
     ceil_dim = math.ceil(dim)
     frac = dim - math.floor(dim)
     has_fractional = ceil_dim != dim
+
+    if position == "center":
+        half_frac = frac / 2
+        full_cells = ceil_dim - (1 if has_fractional else 0)
+        cells = []
+        if has_fractional:
+            cells.append((half_frac, False))
+        for i in range(full_cells):
+            is_corner = i == 0 or i == full_cells - 1
+            cells.append((1.0, is_corner))
+        if has_fractional:
+            cells.append((half_frac, False))
+        return cells
+
     count = ceil_dim
+    has_pre = has_fractional and position == "far"
+    has_post = has_fractional and position == "near"
 
     cells = []
     for i in range(count):
-        if i == 0 and has_fractional and False:  # hasPrePad — only for center/far, not "near"
+        if i == 0 and has_pre:
             cells.append((frac, False))
-        elif i == count - 1 and has_fractional:   # hasPostPad — for "near" alignment
+        elif i == count - 1 and has_post:
             cells.append((frac, False))
         else:
-            is_corner = (i == 0) or (i == count - 1 and not has_fractional) or (i == count - 2 and has_fractional)
+            is_corner = (
+                (i == 0 and not has_pre) or
+                (i == 1 and has_pre) or
+                (i == count - 1 and not has_post) or
+                (i == count - 2 and has_post)
+            )
             cells.append((1.0, is_corner))
     return cells
 
@@ -135,18 +154,20 @@ def add_bottom_lip(
     width: float,
     height: float,
     magnets: bool = False,
+    align_x: str = "near",
+    align_y: str = "near",
 ) -> cq.Workplane:
     """Add the Gridfinity mating lip to the bottom (<Z) face.
 
     Uses OpenSCAD-style cell-based placement: ceil(N) cells per axis,
     each cell getting a pad proportional to its size.
-    Fractional dimensions get a small pad at the fractional end.
+    Fractional dimensions get a small pad at the position specified by align_x/align_y.
     """
     outer_w = width * GRID_UNIT - BLOCK_SPACING
     outer_h = height * GRID_UNIT - BLOCK_SPACING
 
-    x_cells = _cell_sizes(width)
-    y_cells = _cell_sizes(height)
+    x_cells = _cell_sizes(width, align_x)
+    y_cells = _cell_sizes(height, align_y)
 
     pad_grid = cq.Workplane("XY")
     accum_x = 0.0
@@ -156,6 +177,11 @@ def add_bottom_lip(
             # Cell center in world coordinates
             px = -outer_w / 2 + (accum_x + cw / 2) * GRID_UNIT
             py = -outer_h / 2 + (accum_y + ch / 2) * GRID_UNIT
+
+            # Skip cells too small for pad geometry
+            if cw * GRID_UNIT <= BLOCK_MATING_INSET * 2 + 1 or ch * GRID_UNIT <= BLOCK_MATING_INSET * 2 + 1:
+                accum_y += ch
+                continue
 
             # Create pad sized proportionally to cell
             pad_profile = _inset_profile(cw, ch, BLOCK_MATING_INSET)

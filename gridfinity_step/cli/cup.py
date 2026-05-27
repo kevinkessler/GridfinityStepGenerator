@@ -57,6 +57,11 @@ def main(argv: list[str] | None = None) -> None:
     # Extension tabs
     parser.add_argument("--extend", choices=["x", "y", "both"],
                         help="Add connector tabs on sides for joining bins")
+    # Alignment
+    parser.add_argument("--align-x", choices=["near", "far", "center"], default="near",
+                        help="Fractional extension position on X axis")
+    parser.add_argument("--align-y", choices=["near", "far", "center"], default="near",
+                        help="Fractional extension position on Y axis")
 
     parser.add_argument("--output", "-o", default="gridfinity_bin.step", help="Output STEP file")
     args = parser.parse_args(argv)
@@ -107,6 +112,8 @@ def main(argv: list[str] | None = None) -> None:
         lid_clearance=args.lid_clearance,
         efficient_floor=args.efficient_floor,
         extension_side=args.extend or "",
+        align_x=args.align_x,
+        align_y=args.align_y,
     )
     path = export_step(bin_shape, args.output)
     print(f"STEP exported: {path}")

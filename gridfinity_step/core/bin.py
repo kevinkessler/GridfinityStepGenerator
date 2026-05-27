@@ -464,6 +464,9 @@ def make_bin(
     efficient_floor: bool = False,
     # Extension tabs
     extension_side: str = "",
+    # Alignment
+    align_x: str = "near",
+    align_y: str = "near",
 ) -> cq.Workplane:
     """Create a hollow Gridfinity storage bin."""
     body_h = _block_height(depth)
@@ -505,7 +508,7 @@ def make_bin(
             pass
 
     # 4. Add bottom mating lip
-    block = add_bottom_lip(block, width, height, magnets=magnets)
+    block = add_bottom_lip(block, width, height, magnets=magnets, align_x=align_x, align_y=align_y)
 
     # 5. Sliding lid groove (before dividers so they don't block it)
     if sliding_lid:
