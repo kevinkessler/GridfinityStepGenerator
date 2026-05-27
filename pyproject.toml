@@ -1,0 +1,21 @@
+[project]
+name = "gridfinity-step"
+version = "0.1.0"
+description = "Gridfinity STEP file generator using CADQuery"
+requires-python = ">=3.10"
+dependencies = [
+    "cadquery",
+]
+
+[project.scripts]
+gridfinity-cup = "gridfinity_step.cli.cup:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gridfinity_step*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
