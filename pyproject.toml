@@ -9,6 +9,7 @@ dependencies = [
 
 [project.scripts]
 gridfinity-cup = "gridfinity_step.cli.cup:main"
+gridfinity-baseplate = "gridfinity_step.cli.baseplate:main"
 
 [build-system]
 requires = ["setuptools>=61"]
