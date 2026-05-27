@@ -106,6 +106,30 @@ def cut_stacking_lip(block: cq.Workplane, width: float, height: float) -> cq.Wor
     return result
 
 
+def _cell_sizes(dim: float) -> list[tuple[float, bool]]:
+    """Convert a fractional grid dimension into cell sizes, matching OpenSCAD's num_to_list.
+
+    Returns list of [cell_size_in_grid_units, is_outer_edge].
+    e.g. 1.2143 → [[1.0, True], [0.2143, False]]
+         2.0    → [[1.0, True], [1.0, True]]
+    """
+    ceil_dim = math.ceil(dim)
+    frac = dim - math.floor(dim)
+    has_fractional = ceil_dim != dim
+    count = ceil_dim
+
+    cells = []
+    for i in range(count):
+        if i == 0 and has_fractional and False:  # hasPrePad — only for center/far, not "near"
+            cells.append((frac, False))
+        elif i == count - 1 and has_fractional:   # hasPostPad — for "near" alignment
+            cells.append((frac, False))
+        else:
+            is_corner = (i == 0) or (i == count - 1 and not has_fractional) or (i == count - 2 and has_fractional)
+            cells.append((1.0, is_corner))
+    return cells
+
+
 def add_bottom_lip(
     block: cq.Workplane,
     width: float,
@@ -114,60 +138,48 @@ def add_bottom_lip(
 ) -> cq.Workplane:
     """Add the Gridfinity mating lip to the bottom (<Z) face.
 
-    Supports fractional grid dimensions by placing pads at integer grid
-    positions plus fractional edge pads where needed.
+    Uses OpenSCAD-style cell-based placement: ceil(N) cells per axis,
+    each cell getting a pad proportional to its size.
+    Fractional dimensions get a small pad at the fractional end.
     """
-    mating_sketch = _inset_profile(1, 1, BLOCK_MATING_INSET)
-    lip_solid = (
-        cq.Workplane("XY")
-        .placeSketch(mating_sketch)
-        .extrude(BLOCK_MATING_DEPTH * -1)
-        .edges("<Z")
-        .chamfer(BLOCK_MATING_CHAMFER)
-    )
-
-    # Pad positions: only at integer grid positions (not fractional ends)
-    pads_x = int(width) + 1
-    pads_y = int(height) + 1
-
-    # Build pad grid — pads are positioned at integer grid offsets
-    # measured from the block body corner (accounting for BLOCK_SPACING)
     outer_w = width * GRID_UNIT - BLOCK_SPACING
     outer_h = height * GRID_UNIT - BLOCK_SPACING
 
+    x_cells = _cell_sizes(width)
+    y_cells = _cell_sizes(height)
+
     pad_grid = cq.Workplane("XY")
-    for ix in range(pads_x):
-        for iy in range(pads_y):
-            px = ix * GRID_UNIT - outer_w / 2
-            py = iy * GRID_UNIT - outer_h / 2
-            pad_grid = pad_grid.union(
+    accum_x = 0.0
+    for cx, (cw, _is_corner_x) in enumerate(x_cells):
+        accum_y = 0.0
+        for cy, (ch, _is_corner_y) in enumerate(y_cells):
+            # Cell center in world coordinates
+            px = -outer_w / 2 + (accum_x + cw / 2) * GRID_UNIT
+            py = -outer_h / 2 + (accum_y + ch / 2) * GRID_UNIT
+
+            # Create pad sized proportionally to cell
+            pad_profile = _inset_profile(cw, ch, BLOCK_MATING_INSET)
+            pad = (
                 cq.Workplane("XY")
-                .union(lip_solid.val().moved(cq.Location(cq.Vector(px, py, 0))))
+                .placeSketch(pad_profile)
+                .extrude(BLOCK_MATING_DEPTH * -1)
+                .edges("<Z")
+                .chamfer(BLOCK_MATING_CHAMFER)
             )
+            pad_grid = pad_grid.union(
+                cq.Workplane("XY").union(pad.val().moved(cq.Location(cq.Vector(px, py, 0))))
+            )
+            accum_y += ch
+        accum_x += cw
 
-    # Union pads onto the block
     result = block.union(pad_grid)
-
-    # Chamfer inter-pad fillets
-    for i in range(pads_x):
-        for j in range(pads_y):
-            x = (i * GRID_UNIT) - (width * GRID_UNIT / 2) + BLOCK_MATING_INSET
-            y = (j * GRID_UNIT) - (height * GRID_UNIT / 2) + BLOCK_MATING_INSET
-            try:
-                result = (
-                    result
-                    .edges(cq.NearestToPointSelector((x, y, 0)))
-                    .chamfer(BLOCK_MATING_INSET - BLOCK_SPACING * 0.5 - 0.01)
-                )
-            except Exception:
-                continue
 
     # Magnet/screw holes
     if magnets:
         result = (
             result.faces("<Z")
             .workplane()
-            .rarray(GRID_UNIT, GRID_UNIT, pads_x - 1, pads_y - 1)
+            .rarray(GRID_UNIT, GRID_UNIT, len(x_cells), len(y_cells))
             .rect(GRID_UNIT - MAGNET_INSET * 2, GRID_UNIT - MAGNET_INSET * 2)
             .vertices()
             .cboreHole(SCREW_DIAMETER, MAGNET_DIAMETER, MAGNET_DEPTH, SCREW_DEPTH)
