@@ -189,38 +189,27 @@ def add_bottom_lip(
             # Built as two stacked sections unioned, with chamfer on bottom
 
             pad_h = BLOCK_MATING_DEPTH
-            bevel_h = 0.8
-            top_h = pad_h - bevel_h
 
-            # Top section: wide — uses block mating inset directly
-            top_pad = (
+            # Wider pad profile so top chamfer creates visible bevel
+            # (OpenSCAD pad flares outward at the top via bevel2)
+            pad_inset = BLOCK_MATING_INSET - 1.5  # less inset = wider pad
+
+            pad = (
                 cq.Workplane("XY")
-                .placeSketch(_inset_profile(cw, ch, BLOCK_MATING_INSET))
-                .extrude(top_h * -1)
-                .translate((0, 0, bevel_h))
+                .placeSketch(_inset_profile(cw, ch, pad_inset))
+                .extrude(pad_h * -1)
             )
 
-            # Bottom section: narrow — about 2/3 the width
-            narrow_inset = BLOCK_MATING_INSET + 3.5
-            w = max(1, cw * GRID_UNIT - narrow_inset * 2)
-            h = max(1, ch * GRID_UNIT - narrow_inset * 2)
-            cr = max(0.5, FILLET_RADIUS - narrow_inset)
-            bottom_pad = (
-                cq.Workplane("XY")
-                .placeSketch(
-                    cq.Sketch().rect(w, h).vertices().fillet(cr)
-                )
-                .extrude(bevel_h * -1)
-            )
-
-            pad = top_pad.union(bottom_pad)
-            # Two chamfers: bottom edge + top edge (where pad meets block body)
+            # Bottom bevel (OpenSCAD bevel1 = 0.8mm)
             try:
-                pad = pad.faces("<Z").chamfer(0.8)  # bottom bevel
+                pad = pad.faces("<Z").chamfer(0.8)
             except Exception:
                 pass
+
+            # Top bevel — chamfer the junction with the block body
+            # This creates the visible outward flare matching OpenSCAD bevel2
             try:
-                pad = pad.faces(">Z").chamfer(0.5)  # top bevel at body junction
+                pad = pad.faces(">Z").chamfer(1.5)
             except Exception:
                 pass
 
