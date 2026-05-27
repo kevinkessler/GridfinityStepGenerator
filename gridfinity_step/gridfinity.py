@@ -130,25 +130,23 @@ def add_bottom_lip(
     pads_x = int(width) + 1
     pads_y = int(height) + 1
 
-    result = block
+    # Build pad grid — pads are positioned at integer grid offsets
+    # measured from the block body corner (accounting for BLOCK_SPACING)
+    outer_w = width * GRID_UNIT - BLOCK_SPACING
+    outer_h = height * GRID_UNIT - BLOCK_SPACING
+
+    pad_grid = cq.Workplane("XY")
     for ix in range(pads_x):
         for iy in range(pads_y):
-            px = ix * GRID_UNIT - (width * GRID_UNIT / 2)
-            py = iy * GRID_UNIT - (height * GRID_UNIT / 2)
-            result = result.union(
+            px = ix * GRID_UNIT - outer_w / 2
+            py = iy * GRID_UNIT - outer_h / 2
+            pad_grid = pad_grid.union(
                 cq.Workplane("XY")
                 .union(lip_solid.val().moved(cq.Location(cq.Vector(px, py, 0))))
             )
 
-    # Clip pads to the block body outline so they don't extend beyond
-    outer_w = width * GRID_UNIT - BLOCK_SPACING
-    outer_h = height * GRID_UNIT - BLOCK_SPACING
-    clip = (
-        cq.Workplane("XY")
-        .placeSketch(_inset_profile(width, height, BLOCK_SPACING / 2))
-        .extrude(BLOCK_MATING_DEPTH * -2)  # thick enough to cover all pads
-    )
-    result = result.intersect(clip)
+    # Union pads onto the block
+    result = block.union(pad_grid)
 
     # Chamfer inter-pad fillets
     for i in range(pads_x):
