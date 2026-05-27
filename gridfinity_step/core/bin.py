@@ -23,51 +23,88 @@ def _add_label_tab(
     width: int,
     height: int,
     depth: int,
-    wall: str = "back",  # front, back, left, right
-    label_width: float = 0,   # 0 = auto (full width)
-    label_depth: float = 14,  # mm — how far out it sticks
-    label_height: float = 0,  # 0 = auto
+    wall: str = "back",
+    label_width: float = 0,
+    label_depth: float = 14,
+    label_height: float = 0,
     corner_radius: float = 0.6,
 ):
-    """Add a label tab protruding from one wall near the top."""
+    """Cut a sloped label recess into one wall, sloping inward and downward.
+
+    This matches the OpenSCAD 'label overhang' — a wedge-shaped cut in the
+    outer wall that creates a sloped surface for sticking a label.
+    """
     outer_w = width * GRID_UNIT - BLOCK_SPACING
     outer_h = height * GRID_UNIT - BLOCK_SPACING
     body_h = _block_height(depth)
 
-    # Auto-size: full width minus small margin, height ~¾ of tab depth
     if label_width <= 0:
         label_width = outer_w - 6 if wall in ("front", "back") else outer_h - 6
     if label_height <= 0:
         label_height = label_depth * 0.75
 
-    # Create the tab as a rounded-rectangle extrusion
-    tab = (
-        cq.Workplane("XY")
-        .placeSketch(
-            cq.Sketch()
-            .rect(label_width, label_depth)
-            .vertices()
-            .fillet(corner_radius)
-        )
-        .extrude(label_height)
-    )
-
-    # Position based on wall selection
-    tab_z = body_h - label_height / 2 - 2  # near top
     half_w = outer_w / 2
     half_h = outer_h / 2
 
-    positions = {
-        "front":  (0, -half_h - label_depth / 2, tab_z),
-        "back":   (0,  half_h + label_depth / 2, tab_z),
-        "left":   (-half_w - label_depth / 2, 0, tab_z),
-        "right":  (half_w + label_depth / 2, 0, tab_z),
+    # Place near top of bin
+    z_top = body_h - 2
+
+    # The label is a wedge cut INTO the wall
+    # It slopes inward (into the wall) and downward
+    # Create a triangular prism that cuts the wall
+
+    wall_normals = {
+        "front": (0, -1, 0),
+        "back":  (0,  1, 0),
+        "left":  (-1, 0, 0),
+        "right": (1,  0, 0),
     }
+    if wall not in wall_normals:
+        return block
 
-    if wall in positions:
-        tab = tab.translate(positions[wall])
-        block = block.union(tab)
+    nx, ny, _ = wall_normals[wall]
 
+    # Build a wedge shape that goes from the wall outer face inward
+    # Dimensions: label_width (along wall) × label_height (vertical) × label_depth (into wall)
+    # The wedge slopes so the top edge is at the wall surface and bottom edge goes label_depth inward
+
+    if nx != 0:  # left/right wall — label spans Y
+        span_dim = outer_h
+        cutout_w = label_width if label_width > 0 else span_dim - 6
+        # Wedge: top at wall surface (x = nx * half_w), bottom recessed inward
+        x_outer = nx * half_w
+        x_inner = nx * (half_w - label_depth)
+
+        # Create as a box then rotate to create the slope
+        # Simpler: create a box that overlaps the wall, positioned to cut the wedge
+        wedge = (
+            cq.Workplane("XY")
+            .transformed(offset=(x_inner, 0, z_top - label_height))
+            .box(abs(x_outer - x_inner) * 2, cutout_w, label_height)
+        )
+        wedge = wedge.translate((
+            (x_outer + x_inner) / 2,
+            0,
+            z_top - label_height / 2,
+        ))
+    else:  # front/back wall — label spans X
+        span_dim = outer_w
+        cutout_h = label_width if label_width > 0 else span_dim - 6
+        y_outer = ny * half_h
+        y_inner = ny * (half_h - label_depth)
+
+        wedge = (
+            cq.Workplane("XY")
+            .transformed(offset=(0, y_inner, z_top - label_height))
+            .box(cutout_h, abs(y_outer - y_inner) * 2, label_height)
+        )
+        wedge = wedge.translate((
+            0,
+            (y_outer + y_inner) / 2,
+            z_top - label_height / 2,
+        ))
+
+    block = block.cut(wedge)
     return block
 
 
