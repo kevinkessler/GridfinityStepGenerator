@@ -59,37 +59,28 @@ def _add_label_tab(
     half_ch = cavity_h_dim / 2
 
     wall_dirs = {
-        "front": ("Y", -half_ch + wall_thickness),
-        "back":  ("Y",  half_ch - wall_thickness),
-        "left":  ("X", -half_cw + wall_thickness),
-        "right": ("X",  half_cw - wall_thickness),
+        "front": ("Y", -half_ch),   # inner face of front wall
+        "back":  ("Y",  half_ch),    # inner face of back wall
+        "left":  ("X", -half_cw),    # inner face of left wall
+        "right": ("X",  half_cw),    # inner face of right wall
     }
     if wall not in wall_dirs:
         return block
 
-    axis, wall_pos = wall_dirs[wall]
+    axis, wall_face = wall_dirs[wall]
 
-    # Create a wedge as a box: label_width × label_depth × label_height
-    # Positioned against the inner wall, extending INWARD toward the center
+    # Wedge extends from wall inner face toward center by label_depth
     if axis == "Y":
-        # Front/back wall: wedge spans X, protrudes in Y toward center
-        wedge = (
-            cq.Workplane("XY")
-            .box(label_width, label_depth, label_height)
-        )
-        # Extend toward center: front (+Y), back (-Y)
-        direction = 1 if wall == "front" else -1
-        y_center = wall_pos + direction * label_depth / 2
+        wedge = cq.Workplane("XY").box(label_width, label_depth, label_height)
+        # Back wall: extend toward -Y (center). Front wall: extend toward +Y (center)
+        direction = -1 if wall == "back" else 1
+        y_center = wall_face + direction * label_depth / 2
         wedge = wedge.translate((0, y_center, z_top - label_height / 2))
     else:
-        # Left/right wall: wedge spans Y, protrudes in X toward center
-        wedge = (
-            cq.Workplane("XY")
-            .box(label_depth, label_width, label_height)
-        )
-        # Extend toward center: left (+X), right (-X)
-        direction = 1 if wall == "left" else -1
-        x_center = wall_pos + direction * label_depth / 2
+        wedge = cq.Workplane("XY").box(label_depth, label_width, label_height)
+        # Right wall: extend toward -X (center). Left wall: extend toward +X (center)
+        direction = -1 if wall == "right" else 1
+        x_center = wall_face + direction * label_depth / 2
         wedge = wedge.translate((x_center, 0, z_top - label_height / 2))
 
     block = block.union(wedge)
