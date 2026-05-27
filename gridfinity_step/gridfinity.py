@@ -190,26 +190,33 @@ def add_bottom_lip(
 
             pad_h = BLOCK_MATING_DEPTH
 
-            # Wider pad profile so top chamfer creates visible bevel
-            # (OpenSCAD pad flares outward at the top via bevel2)
-            pad_inset = BLOCK_MATING_INSET - 1.5  # less inset = wider pad
-
-            pad = (
+            # Build pad as stacked sections: wide top tapering to narrow bottom
+            # Top 60% of pad: wide (matches bevel2 outward flare)
+            top_frac = 0.6
+            top_h = pad_h * top_frac
+            top_pad = (
                 cq.Workplane("XY")
-                .placeSketch(_inset_profile(cw, ch, pad_inset))
-                .extrude(pad_h * -1)
+                .placeSketch(_inset_profile(cw, ch, BLOCK_MATING_INSET - 1.5))
+                .extrude(top_h * -1)
             )
 
-            # Bottom bevel (OpenSCAD bevel1 = 0.8mm)
+            # Bottom 40%: narrow (matches bevel1 base)
+            bot_h = pad_h - top_h
+            bot_inset = BLOCK_MATING_INSET + 3.0
+            bot_w = max(1, cw * GRID_UNIT - bot_inset * 2)
+            bot_h_dim = max(1, ch * GRID_UNIT - bot_inset * 2)
+
+            bot_pad = (
+                cq.Workplane("XY")
+                .box(bot_w, bot_h_dim, bot_h, centered=(True, True, False))
+                .translate((0, 0, -top_h - bot_h))
+            )
+
+            pad = top_pad.union(bot_pad)
+
+            # Chamfer very bottom edge
             try:
                 pad = pad.faces("<Z").chamfer(0.8)
-            except Exception:
-                pass
-
-            # Top bevel — chamfer the junction with the block body
-            # This creates the visible outward flare matching OpenSCAD bevel2
-            try:
-                pad = pad.faces(">Z").chamfer(1.5)
             except Exception:
                 pass
 
